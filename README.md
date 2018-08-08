@@ -1,5 +1,5 @@
 # FOLIO-im-poster
-A Python3 script that posts FOLIO ILS Items and Holdings into a FOLIO tenant.
+A Python3 script that posts FOLIO ILS/LMS Instances, Items and Holdings into a FOLIO tenant.
 
 A few tweaks are added to the objects
 
