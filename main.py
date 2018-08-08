@@ -1,158 +1,172 @@
 import json
 import sys
-import requests
 import time
-from random import randint
 import multiprocessing
-
+import requests
 print("Script starting")
-locationIds = ['53cf956f-c1df-410b-8bea-27f712cca7c0',
-               'fcd64ce1-6995-48f0-840e-89ffa2288371',
-               '758258bc-ecc1-41b8-abca-f7b610822ffd',
-               'b241764c-1466-4e1d-a028-1a3684a5da87',
-               'f34d27c6-a8eb-461b-acd6-5dea81771e70']
 
 start = time.time()
 
 print('Will post data to')
 
-okapiUrl = sys.argv[3]
-print("\tOkapi URL:\t", okapiUrl)
+okapi_url = sys.argv[3]
+print("\tOkapi URL:\t", okapi_url)
 
-tenantId = sys.argv[4]
-print("\tTenanti Id:\t", tenantId)
+tenant_id = sys.argv[4]
+print("\tTenanti Id:\t", tenant_id)
 
-okapiToken = sys.argv[5]
-print("\tToken:   \t", okapiToken)
+okapi_token = sys.argv[5]
+print("\tToken:   \t", okapi_token)
 
 print("Opening file", sys.argv[2])
 myi = 0
 i = 0
 url = ""
-instanceIdMappings = {}
+instance_id_mappings = {}
 lookups = 0
-cacheHits = 0
-okapiHeaders = {'x-okapi-token': okapiToken,
-                'x-okapi-tenant': tenantId,
-                'content-type': 'application/json'}
+cache_hits = 0
+okapi_headers = {'x-okapi-token': okapi_token,
+                 'x-okapi-tenant': tenant_id,
+                 'content-type': 'application/json'}
 
 
-def getFOLIOInstanceId(oldId):
-    if oldId in instanceIdMappings:
+def get_folio_instance_id(old_id):
+    if old_id in instance_id_mappings:
         print('cache hit!')
-        return instanceIdMappings[oldId]
+        return instance_id_mappings[old_id]
     else:
-        instanceIdMappings[oldId] = lookupFOLIOInstanceId(oldId)
-        return instanceIdMappings[oldId]
+        instance_id_mappings[old_id] = lookup_folio_instance_id(old_id)
+        return instance_id_mappings[old_id]
 
 
-def lookupFOLIOInstanceId(oldId):
-    start = time.time()
+def lookup_folio_instance_id(old_id):
     path = "/instance-storage/instances"
     identifierTypeId = '7e591197-f335-4afb-bc6d-a6d76ca3bace'
-    url = '?limit=2&query=identifiers == \"*\\\"value\\\": \\\"{}*\\\", \\\"identifierTypeId\\\": \\\"{}\\\"*\" sortby title'.format(oldId, identifierTypeId)
-    req = requests.get(okapiUrl+path+url,
-                       headers=okapiHeaders)
-    folioInstanceId = json.loads(req.text)['instances'][0]['id']
-    return folioInstanceId
+    url = ('?limit=2&query=identifiers == \"*\\\"value\\\": \\\"{}*\\\",'
+           '\\\"identifierTypeId\\\": \\\"{}\\\"*\" sortby'
+           'title').format(old_id, identifierTypeId)
+    req = requests.get(okapi_url+path+url,
+                       headers=okapi_headers)
+    folio_instance_id = json.loads(req.text)['instances'][0]['id']
+    return folio_instance_id
 
 
-def deleteItem(itemId):
-    path = '/items-storage/temss/{0}'.format(itemId)
-    req = requests.delete(okapiUrl+path, headers=okapiHeaders)
+def delete_item(item_id):
+    path = '/items-storage/temss/{0}'.format(item_id)
+    req = requests.delete(okapi_url+path, headers=okapi_headers)
 
 
-def deleteInstance(instanceId):
-    path = '/instance-storage/instances/{0}'.format(instanceId)
-    req = requests.delete(okapiUrl+path, headers=okapiHeaders)
+def delete_instance(instance_id):
+    path = '/instance-storage/instances/{0}'.format(instance_id)
+    req = requests.delete(okapi_url+path, headers=okapi_headers)
 
 
-def deleteHolding(holdingId):
-    path = '/holdings-storage/holdings/{0}'.format(holdingId)
-    req = requests.delete(okapiUrl+path, headers=okapiHeaders)
+def delete_holding(holding_id):
+    path = '/holdings-storage/holdings/{0}'.format(holding_id)
+    req = requests.delete(okapi_url+path, headers=okapi_headers)
 
 
-def postInstance(instance):
+def post_instance(instance):
     path = '/instance-storage/instances'
-    req = requests.post(okapiUrl+path,
-                        data=json.dumps(instance),
-                        headers=okapiHeaders)
-#    print(req.status_code)
-    if req.status_code == 400 and 'already exists.' in req.text:
-        deleteInstance(instance['id'])
-        # TODO: take care of infinite loop
-        postInstance(instance)
+    try:
+        req = requests.post(okapi_url+path,
+                            data=json.dumps(instance),
+                            headers=okapi_headers,
+                            timeout=2)
+        if req.status_code == 400 and 'already exists.' in req.text:
+            delete_instance(instance['id'])
+            # TODO: take care of infinite loop
+            if post_instance(instance): 
+                return True
+        if req.status_code == 201:
+            return True
+        if 401 <= req.status_code <= 599:
+            print("Error!")
+            print("Code:\t{} Message:\t{}".format(req.status_code, req.text))
+            print(instance)
+            return False
+    except Exception as e:
+        print("ERROR!\ttype\t{} ID:\t{}".format(type(e), instance["id"]))
+        return False
 
 
-def postItem(item):
+def post_item(item):
     path = '/item-storage/items'
-    req = requests.post(okapiUrl+path,
+    req = requests.post(okapi_url+path,
                         data=json.dumps(item),
-                        headers=okapiHeaders)
+                        headers=okapi_headers)
     if req.status_code == 400 and 'already exists.' in req.text:
-        deleteItem(item['id'])
+        delete_item(item['id'])
         # TODO: take care of infinite loop
-        postItem(item)
+        post_item(item)
+        print("Exists")
 
 
-def postHolding(holding):
+def post_holding(holding):
     path = '/holdings-storage/holdings'
-    req = requests.post(okapiUrl+path,
+    req = requests.post(okapi_url+path,
                         data=json.dumps(holding),
-                        headers=okapiHeaders)
+                        headers=okapi_headers)
     if req.status_code == 400 and 'already exists.' in req.text:
-        deleteHolding(holding['id'])
+        delete_holding(holding['id'])
         # TODO: take care of infinite loop
-        postHolding(holding)
+        post_holding(holding)
 
 
 def myformat(x):
         return ('%.2f' % x).rstrip('0').rstrip('.')
 
 
-def handleHolding(line):
+def handle_holding(line):
     holding = json.loads(line)
-    oldInstanceId = holding["instanceId"]
-    holding["instanceId"] = getFOLIOInstanceId(oldInstanceId)
-    holding['permanentLocationId'] = locationIds[randint(0, 4)]
-    postHolding(holding)
+    old_instance_id = holding["instance_id"]
+    holding["instance_id"] = get_folio_instance_id(old_instance_id)
+    post_holding(holding)
 
 
-def handleInstance(line):
+def handle_instance(line):
     instance = json.loads(line)
-    postInstance(instance)
+    post_instance(instance)
 
 
-def handleItem(line):
+def hadle_item(line):
     item = json.loads(line)
-    postItem(item)
+    post_item(item)
 
-i = 0
+
+successful = 0
+failed = 0
 start = time.time()
 
 
-def cb():
+def cb(result):
     global start
-    global i
-    i += 1
-    if i % 10 == 0:
-        elapsed = myformat(i/(time.time() - start))
-        print("r/s: {}\tItems: {}".format(elapsed, i))
-    return i
+    global successful
+    global failed
+    if result:
+        successful += 1
+    else:
+        failed += 1
+#    if i % 10 == 0:
+    elapsed = myformat((successful+failed)/(time.time() - start))
+    print("r/s: {}\tFailed: {}\tSuccessful: {}".format(elapsed,
+                                                       successful,
+                                                       failed), end="\r")
+    return successful
 
 
 # Main
 with multiprocessing.Pool(processes=1) as pool:
     if sys.argv[1] in ['holdings', 'holding', 'hold']:
         with open(sys.argv[2]) as f:
-            pool.map(handleHolding,  f)
+            pool.map(handle_holding,  f)
     elif sys.argv[1] in ['items', 'item']:
         with open(sys.argv[2]) as f:
             for line in f:
-                pool.map(handleItem, f)
+                pool.map(hadle_item, f)
     elif sys.argv[1] in ['bibs', 'bib', 'instance', 'instances']:
         with open(sys.argv[2]) as f:
-            for line in f: 
-                handleInstance(line)
-                cb()
+            for line in f:
+                cb(handle_instance(line))
+                
 print("Script finished")
