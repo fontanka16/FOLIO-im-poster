@@ -1,3 +1,6 @@
+This repo has been forked to https://github.com/FOLIO-FSE/FOLIO-im-poster and lives there from now on
+
+
 # FOLIO-im-poster
 A Python3 script that posts FOLIO ILS/LMS Instances, Items and Holdings into a FOLIO tenant.
 
